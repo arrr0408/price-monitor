@@ -18,6 +18,7 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 SINA_URL = "https://hq.sinajs.cn/list="
