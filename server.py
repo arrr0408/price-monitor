@@ -9,6 +9,14 @@ import socket
 import sys
 import time
 import threading
+from datetime import timezone, timedelta
+
+# 北京时间
+TZ = timezone(timedelta(hours=8))
+
+
+def now_str(fmt="%H:%M:%S"):
+    return time.strftime(fmt, time.gmtime(time.time() + 28800))
 
 import requests
 from flask import Flask, jsonify, render_template
@@ -87,7 +95,7 @@ def parse_hf_xau(fields, item):
         "low": safe_float(fields[5]),
         "open": safe_float(fields[7]),
         "prev_close": round(prev_close, 2),
-        "time": time.strftime("%H:%M:%S"),
+        "time": now_str(),
     }
 
 
@@ -106,7 +114,7 @@ def parse_fx_susdcny(fields, item):
         "low": safe_float(fields[7]),
         "open": safe_float(fields[5]),
         "prev_close": round(prev_close, 4),
-        "time": time.strftime("%H:%M:%S"),
+        "time": now_str(),
     }
 
 
@@ -125,7 +133,7 @@ def parse_gjs_au9999(fields, item):
         "low": safe_float(fields[7]),
         "open": safe_float(fields[8]),
         "prev_close": round(prev_close, 2),
-        "time": time.strftime("%H:%M:%S"),
+        "time": now_str(),
     }
 
 
@@ -144,7 +152,7 @@ def parse_stock(fields, item):
         "low": safe_float(fields[5]),
         "open": safe_float(fields[1]),
         "prev_close": round(prev_close, 2),
-        "time": time.strftime("%H:%M:%S"),
+        "time": now_str(),
     }
 
 
@@ -264,7 +272,7 @@ def compute_jicun_price(config):
         "low": jicun_low,
         "open": 0,
         "prev_close": round(base_price - jicun_change, 2) if jicun_change else base_price,
-        "time": time.strftime("%H:%M:%S"),
+        "time": now_str(),
     }
 
 
@@ -325,7 +333,7 @@ def index():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "time": time.strftime("%H:%M:%S")})
+    return jsonify({"status": "ok", "time": now_str()})
 
 
 @app.route("/api/prices")
@@ -349,14 +357,14 @@ def api_prices():
             "note": "休市 / 暂无数据",
             "price": 0, "change": 0, "change_pct": 0,
             "high": 0, "low": 0, "open": 0, "prev_close": 0,
-            "time": time.strftime("%H:%M:%S"),
+            "time": now_str(),
         })
 
     # 按 config 顺序排列
     code_order = [item["code"] for item in config.get("items", [])]
     data.sort(key=lambda x: code_order.index(x["code"]) if x["code"] in code_order else 999)
 
-    return jsonify({"items": data, "server_time": time.strftime("%H:%M:%S")})
+    return jsonify({"items": data, "server_time": now_str()})
 
 
 # ═══════════════════════════════════════════
