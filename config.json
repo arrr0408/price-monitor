@@ -1,0 +1,35 @@
+{
+  "refresh_interval": 5,
+  "jicun": {
+    "display_name": "工银积存金",
+    "spread_pct": 0.28,
+    "manual_price": 0,
+    "_comment": "spread_pct=工行点差比例(%), manual_price>0时直接使用该价格覆盖计算"
+  },
+  "items": [
+    {
+      "name": "工银积存金",
+      "code": "computed_jicun",
+      "type": "computed",
+      "note": "自动计算"
+    },
+    {
+      "name": "国际金价",
+      "code": "hf_XAU",
+      "type": "sina_hf",
+      "note": "XAU/USD 美元/盎司"
+    },
+    {
+      "name": "美元/人民币",
+      "code": "fx_susdcny",
+      "type": "sina_forex",
+      "note": "在岸汇率"
+    },
+    {
+      "name": "上金所Au99.99",
+      "code": "gjs_Au9999",
+      "type": "sina_commodity",
+      "note": "交易时段可用"
+    }
+  ]
+}

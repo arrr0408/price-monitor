@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="价格监控">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
+<title>实时价格监控</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card-bg: #1a1d28;
+    --text: #e8eaed;
+    --text-secondary: #9aa0a6;
+    --up-color: #ef5350;
+    --down-color: #26a69a;
+    --border: #2a2d3a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .header {
+    padding: 16px 20px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4caf50;
+    animation: pulse 2s infinite;
+  }
+
+  .status-dot.error { background: #ef5350; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .refresh-countdown {
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    color: var(--text-secondary);
+    min-width: 46px;
+    text-align: right;
+  }
+
+  .cards {
+    padding: 8px 12px 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border-radius: 14px;
+    padding: 18px 20px;
+    border: 1px solid var(--border);
+    transition: transform 0.15s;
+  }
+
+  .card:active { transform: scale(0.985); }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .card-name { font-size: 16px; font-weight: 600; }
+
+  .card-note {
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.05);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  .card-body {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .price-main {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.3s;
+  }
+
+  .price-change {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .change-value { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .change-pct { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  .up { color: var(--up-color); }
+  .down { color: var(--down-color); }
+  .flat { color: var(--text-secondary); }
+
+  .card-detail {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .detail-item { display: flex; gap: 4px; }
+  .detail-label { opacity: 0.6; }
+  .detail-value { font-variant-numeric: tabular-nums; color: var(--text); }
+
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+    opacity: 0.6;
+  }
+
+  .flash { animation: flash-bg 0.6s ease-out; }
+
+  @keyframes flash-bg {
+    0% { background: rgba(255,183,77,0.15); }
+    100% { background: transparent; }
+  }
+
+  .offline-banner {
+    display: none;
+    text-align: center;
+    padding: 12px;
+    margin: 0 12px;
+    background: rgba(239,83,80,0.15);
+    border-radius: 10px;
+    color: var(--up-color);
+    font-size: 13px;
+  }
+
+  .offline-banner.show { display: block; }
+
+  @media (min-width: 768px) {
+    .cards { max-width: 500px; margin: 0 auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>实时价格</h1>
+  <div class="status-bar">
+    <span class="status-dot" id="statusDot"></span>
+    <span class="refresh-countdown" id="countdown">5s</span>
+  </div>
+</div>
+
+<div class="offline-banner" id="offlineBanner">网络连接异常，正在重试...</div>
+
+<div class="cards" id="cards"></div>
+
+<script>
+const REFRESH_INTERVAL = 5000;
+let countdown = REFRESH_INTERVAL / 1000;
+let lastPrices = {};
+let consecutiveErrors = 0;
+
+function getChangeClass(v) {
+  if (v > 0) return 'up';
+  if (v < 0) return 'down';
+  return 'flat';
+}
+
+function formatNum(n, decimals) {
+  if (n == null || isNaN(n)) return '--';
+  decimals = decimals != null ? decimals : (Math.abs(n) >= 10 ? 2 : 4);
+  return n.toFixed(decimals);
+}
+
+function formatChange(v) {
+  if (v == null || isNaN(v)) return '--';
+  return (v >= 0 ? '+' : '') + (Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(4));
+}
+
+function formatPct(v) {
+  if (v == null || isNaN(v)) return '--';
+  return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+}
+
+function renderCard(item) {
+  const changeCls = getChangeClass(item.change);
+  const oldPrice = lastPrices[item.code];
+  const priceChanged = oldPrice != null && oldPrice !== item.price;
+  const flashCls = priceChanged ? ' flash' : '';
+  const isClosed = item.price === 0 && item.code === 'gjs_Au9999';
+
+  const unit = item.code === 'fx_susdcny' ? '' :
+               item.code === 'hf_XAU' ? ' $/oz' : ' 元/克';
+
+  if (isClosed) {
+    return `<div class="card" data-code="${item.code}" style="opacity:0.5">
+      <div class="card-header">
+        <span class="card-name">${item.name}</span>
+        <span class="card-note">${item.note || item.code}</span>
+      </div>
+      <div class="card-body">
+        <span class="price-main flat">休市中</span>
+        <div class="price-change">
+          <span class="change-value flat">--</span>
+          <span class="change-pct flat">--</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span>交易时间 周一至周五</span>
+        <span>${item.time}</span>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="card${flashCls}" data-code="${item.code}">
+    <div class="card-header">
+      <span class="card-name">${item.name}</span>
+      <span class="card-note">${item.note || item.code}</span>
+    </div>
+    <div class="card-body">
+      <span class="price-main ${changeCls}">${formatNum(item.price)}<span style="font-size:14px;font-weight:400;opacity:0.6">${unit}</span></span>
+      <div class="price-change">
+        <span class="change-value ${changeCls}">${formatChange(item.change)}</span>
+        <span class="change-pct ${changeCls}">${formatPct(item.change_pct)}</span>
+      </div>
+    </div>
+    <div class="card-detail">
+      <div class="detail-item"><span class="detail-label">最高</span><span class="detail-value">${formatNum(item.high)}</span></div>
+      <div class="detail-item"><span class="detail-label">最低</span><span class="detail-value">${formatNum(item.low)}</span></div>
+      <div class="detail-item"><span class="detail-label">开盘</span><span class="detail-value">${formatNum(item.open)}</span></div>
+      <div class="detail-item"><span class="detail-label">昨收</span><span class="detail-value">${formatNum(item.prev_close)}</span></div>
+    </div>
+    <div class="card-footer">
+      <span>${item.code}</span>
+      <span>更新 ${item.time}</span>
+    </div>
+  </div>`;
+}
+
+async function fetchPrices() {
+  try {
+    const resp = await fetch('/api/prices');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+
+    consecutiveErrors = 0;
+    document.getElementById('offlineBanner').classList.remove('show');
+    document.getElementById('statusDot').classList.remove('error');
+
+    const newPrices = {};
+    data.items.forEach(it => { newPrices[it.code] = it.price; });
+
+    document.getElementById('cards').innerHTML = data.items.map(renderCard).join('');
+    lastPrices = newPrices;
+    countdown = REFRESH_INTERVAL / 1000;
+    updateCountdown();
+
+  } catch (err) {
+    consecutiveErrors++;
+    if (consecutiveErrors >= 3) {
+      document.getElementById('offlineBanner').classList.add('show');
+      document.getElementById('statusDot').classList.add('error');
+    }
+  }
+}
+
+function updateCountdown() {
+  document.getElementById('countdown').textContent = countdown + 's';
+}
+
+setInterval(() => {
+  countdown = Math.max(0, countdown - 1);
+  updateCountdown();
+}, 1000);
+
+setInterval(fetchPrices, REFRESH_INTERVAL);
+fetchPrices();
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    fetchPrices();
+    countdown = REFRESH_INTERVAL / 1000;
+    updateCountdown();
+  }
+});
+</script>
+</body>
+</html>
