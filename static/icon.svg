@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A78BFA" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#818CF8" stop-opacity="0.15"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 圆角方形背景 -->
+  <rect x="64" y="64" width="896" height="896" rx="224" ry="224" fill="url(#bg)"/>
+
+  <!-- 光晕圆 -->
+  <ellipse cx="640" cy="280" rx="340" ry="300" fill="url(#glow)"/>
+
+  <!-- 第一根蜡烛（阳线，红色） -->
+  <rect x="280" y="360" width="60" height="200" rx="6" fill="#fff" opacity="0.9"/>
+  <line x1="310" y1="300" x2="310" y2="340" stroke="#fff" stroke-width="12" stroke-linecap="round" opacity="0.9"/>
+  <line x1="310" y1="560" x2="310" y2="660" stroke="#fff" stroke-width="12" stroke-linecap="round" opacity="0.9"/>
+
+  <!-- 第二根蜡烛（阴线，绿色） -->
+  <rect x="400" y="280" width="60" height="180" rx="6" fill="#fff" opacity="0.55"/>
+  <line x1="430" y1="220" x2="430" y2="260" stroke="#fff" stroke-width="12" stroke-linecap="round" opacity="0.55"/>
+  <line x1="430" y1="460" x2="430" y2="580" stroke="#fff" stroke-width="12" stroke-linecap="round" opacity="0.55"/>
+
+  <!-- 第三根蜡烛（阳线） -->
+  <rect x="520" y="400" width="60" height="160" rx="6" fill="#fff" opacity="0.9"/>
+  <line x1="550" y1="340" x2="550" y2="380" stroke="#fff" stroke-width="12" stroke-linecap="round" opacity="0.9"/>
+  <line x1="550" y1="560" x2="550" y2="620" stroke="#fff" stroke-width="12" stroke-linecap="round" opacity="0.9"/>
+
+  <!-- 第四根蜡烛（阳线） -->
+  <rect x="640" y="360" width="60" height="240" rx="6" fill="#fff" opacity="0.95"/>
+  <line x1="670" y1="280" x2="670" y2="340" stroke="#fff" stroke-width="12" stroke-linecap="round" opacity="0.95"/>
+  <line x1="670" y1="600" x2="670" y2="700" stroke="#fff" stroke-width="12" stroke-linecap="round" opacity="0.95"/>
+
+  <!-- 趋势线（向上箭头） -->
+  <polyline points="310,560 430,380 550,480 670,340"
+    fill="none" stroke="#FBBF24" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- 箭头尖 -->
+  <polygon points="670,340 620,420 680,430" fill="#FBBF24"/>
+</svg>
