@@ -1195,8 +1195,8 @@ async function fetchAndRenderKline(code) {
       const option = {
         animation: false,
         grid: [
-          { left: 10, right: 10, top: 10, height: '65%' },
-          { left: 10, right: 10, top: '78%', height: '14%' },
+          { left: 10, right: 10, top: 10, height: '58%' },
+          { left: 10, right: 10, top: '72%', height: '12%' },
         ],
         xAxis: [
           {
@@ -1225,20 +1225,28 @@ async function fetchAndRenderKline(code) {
         ],
         dataZoom: [
           {
-            type: 'slider', xAxisIndex: 0, height: 20, bottom: 6,
+            type: 'slider', xAxisIndex: 0, height: 36, bottom: 8,
             borderColor: '#e8e8ef', backgroundColor: '#f2f3f7',
+            fillerColor: 'rgba(91,106,240,0.08)',
             dataBackground: {
               lineStyle: { color: '#d0d0d8' },
-              areaStyle: { color: 'rgba(91,106,240,0.06)' },
+              areaStyle: { color: 'rgba(91,106,240,0.04)' },
             },
             selectedDataBackground: {
               lineStyle: { color: '#5b6af0' },
-              areaStyle: { color: 'rgba(91,106,240,0.12)' },
+              areaStyle: { color: 'rgba(91,106,240,0.1)' },
             },
-            handleStyle: { color: '#5b6af0' },
+            handleStyle: { color: '#5b6af0', size: 26 },
             moveHandleStyle: { color: '#5b6af0' },
+            handleSize: '120%',
+            textStyle: { fontSize: 10, color: '#8e8e9a' },
           },
-          { type: 'inside', xAxisIndex: 0 },
+          {
+            type: 'inside', xAxisIndex: 0,
+            zoomOnMouseWheel: false,
+            moveOnMouseWheel: false,
+            moveOnMouseMove: false,
+          },
         ],
         tooltip: {
           trigger: 'axis', axisPointer: { type: 'cross' },
