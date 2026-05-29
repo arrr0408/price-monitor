@@ -209,30 +209,51 @@
 
   .offline-banner.show { display: block; }
 
-  /* 添加按钮 */
-  .add-btn {
-    width: 34px; height: 34px;
-    border-radius: 50%;
-    border: 2px solid var(--border);
+  /* 底部工具栏 */
+  .bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    padding: 10px 20px 16px;
     background: var(--card-bg);
-    font-size: 20px;
-    color: var(--accent);
+    border-top: 1px solid var(--border);
+    z-index: 100;
+  }
+
+  .bar-btn {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: var(--bg);
+    font-size: 22px;
+    color: var(--text-secondary);
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: all 0.2s;
     line-height: 1;
   }
-  .add-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .add-btn.active { transform: rotate(45deg); background: var(--up-color); color: #fff; border-color: var(--up-color); }
+  .bar-btn:hover, .bar-btn.active {
+    background: var(--accent);
+    color: #fff;
+  }
+  .bar-btn.active { transform: rotate(45deg); }
 
   /* 添加面板 */
   .add-panel {
     display: none;
-    margin: 0 14px 4px;
+    position: fixed;
+    bottom: 76px;
+    left: 14px;
+    right: 14px;
+    z-index: 99;
     background: var(--card-bg);
     border-radius: 14px;
     padding: 16px 18px;
-    box-shadow: var(--shadow);
+    box-shadow: 0 -2px 16px rgba(0,0,0,0.1);
   }
   .add-panel.show { display: block; }
   .add-panel-row {
@@ -282,8 +303,12 @@
   }
   .card.custom .delete-btn { display: inline-flex; align-items: center; justify-content: center; }
 
+  .cards { padding-bottom: 90px; }
+
   @media (min-width: 768px) {
-    .cards, .add-panel { max-width: 520px; margin-left: auto; margin-right: auto; }
+    .cards, .add-panel, .bottom-bar-inner { max-width: 520px; margin-left: auto; margin-right: auto; }
+    .add-panel { left: 50%; right: auto; transform: translateX(-50%); width: 100%; max-width: 520px; }
+    .bottom-bar { padding-left: 0; padding-right: 0; }
   }
 </style>
 </head>
@@ -294,7 +319,6 @@
   <div class="status-bar">
     <span class="status-dot" id="statusDot"></span>
     <span class="refresh-countdown" id="countdown">5s</span>
-    <button class="add-btn" id="addBtn" title="添加自选">+</button>
   </div>
 </div>
 
@@ -310,6 +334,10 @@
 <div class="offline-banner" id="offlineBanner">网络连接异常，正在重试...</div>
 
 <div class="cards" id="cards"></div>
+
+<div class="bottom-bar">
+  <button class="bar-btn" id="addBtn" title="添加自选">+</button>
+</div>
 
 <script>
 const REFRESH_INTERVAL = 5000; // ms
