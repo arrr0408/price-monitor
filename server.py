@@ -412,7 +412,7 @@ def api_prices():
 # ═══════════════════════════════════════════
 
 KLINE_CACHE = {}
-KLINE_CACHE_TTL = 3600  # 1小时缓存
+KLINE_CACHE_TTL = 5  # 5秒缓存，日线实时更新
 
 KLINE_URL = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
 
