@@ -26,25 +26,27 @@
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-    background: var(--bg);
+    background: linear-gradient(180deg, #f0f1f6 0%, #f5f6fa 100%);
     color: var(--text);
     min-height: 100vh;
+    min-height: 100dvh;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
     -webkit-user-select: none;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .header {
-    padding: 20px 20px 12px;
+    padding: 18px 20px 6px;
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
 
   .header h1 {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
     color: var(--text);
   }
 
@@ -80,18 +82,19 @@
   }
 
   .cards {
-    padding: 8px 14px 30px;
+    padding: 4px 16px 100px;
+    padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
   }
 
   .card {
     background: var(--card-bg);
     border-radius: 16px;
-    padding: 20px 22px;
-    box-shadow: var(--shadow);
-    transition: transform 0.15s, opacity 0.15s;
+    padding: 18px 20px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.04);
+    transition: transform 0.15s, opacity 0.15s, box-shadow 0.2s;
     position: relative;
     overflow: hidden;
   }
@@ -146,11 +149,12 @@
   }
 
   .price-main {
-    font-size: 38px;
+    font-size: 36px;
     font-weight: 800;
     letter-spacing: -1.5px;
     font-variant-numeric: tabular-nums;
     transition: color 0.3s;
+    line-height: 1.1;
   }
 
   .price-change {
@@ -182,7 +186,8 @@
 
   .card-detail {
     display: flex;
-    gap: 18px;
+    flex-wrap: wrap;
+    gap: 6px 14px;
     font-size: 12px;
     color: var(--text-secondary);
   }
@@ -232,17 +237,21 @@
   /* 底部工具栏 — 沉浸光感 */
   .bottom-bar {
     position: fixed;
-    bottom: 20px;
+    bottom: 24px;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 6px;
-    padding: 6px 18px;
-    background: rgba(255, 255, 255, 0.68);
-    backdrop-filter: blur(24px) saturate(160%);
-    -webkit-backdrop-filter: blur(24px) saturate(160%);
-    border-radius: 28px;
-    box-shadow: 0 2px 20px rgba(0,0,0,0.07), 0 0 0 1px rgba(255,255,255,0.6) inset;
+    gap: 4px;
+    padding: 6px 16px;
+    background: rgba(255, 255, 255, 0.64);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border-radius: 26px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.7) inset,
+      0 4px 24px rgba(0,0,0,0.06),
+      0 1px 3px rgba(0,0,0,0.04);
     z-index: 100;
   }
 
@@ -312,18 +321,19 @@
 
   /* 删除按钮 */
   .delete-btn {
-    display: none;
     width: 22px; height: 22px;
     border-radius: 50%;
     border: none;
-    background: #fdd;
-    color: var(--up-color);
+    background: #f5f5f5;
+    color: var(--text-secondary);
     font-size: 14px;
     cursor: pointer;
     line-height: 1;
     margin-left: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
   }
-  .card.custom .delete-btn { display: inline-flex; align-items: center; justify-content: center; }
+  .delete-btn:active { background: #fdd; color: var(--up-color); }
 
   /* 持仓信息 */
   .card-position {
@@ -485,26 +495,41 @@ function formatPct(v) {
 }
 
 const STORAGE_KEY = 'price_monitor_customs';
+const HIDDEN_KEY = 'price_monitor_hidden';
 
 function getCustomItems() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  } catch (e) {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch (e) { return []; }
 }
 
 function saveCustomItems(items) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
 
+function getHiddenItems() {
+  try { return JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]'); } catch (e) { return []; }
+}
+
+function saveHiddenItems(items) {
+  localStorage.setItem(HIDDEN_KEY, JSON.stringify(items));
+}
+
 function isCustom(code) {
   return getCustomItems().some(c => c.code === code);
 }
 
-function removeCustom(code) {
-  const items = getCustomItems().filter(c => c.code !== code);
-  saveCustomItems(items);
+function removeItem(code) {
+  // 自定义项：从列表删除
+  const customs = getCustomItems().filter(c => c.code !== code);
+  saveCustomItems(customs);
+  // 默认项：加入隐藏列表
+  const configCodes = ['hf_XAU', 'fx_susdcny', 'gjs_Au9999', 'computed_jicun'];
+  if (configCodes.includes(code)) {
+    const hidden = getHiddenItems();
+    if (!hidden.includes(code)) {
+      hidden.push(code);
+      saveHiddenItems(hidden);
+    }
+  }
   fetchPrices();
 }
 
@@ -519,10 +544,8 @@ function renderCard(item) {
   const unit = item.code === 'fx_susdcny' ? '' :
                item.code === 'hf_XAU' ? ' $/oz' : ' 元/克';
 
-  const custom = isCustom(item.code);
-  const delBtn = custom ?
-    `<button class="delete-btn" onclick="event.stopPropagation();removeCustom('${item.code}')">&times;</button>` : '';
-  const swipeBg = custom ? '<div class="card-swipe-bg">释放删除</div>' : '';
+  const delBtn = `<button class="delete-btn" onclick="event.stopPropagation();removeItem('${item.code}')">&times;</button>`;
+  const swipeBg = '<div class="card-swipe-bg">释放删除</div>';
 
   // 持仓信息
   const shares = item.shares || 0;
@@ -623,6 +646,10 @@ async function fetchPrices() {
     document.getElementById('offlineBanner').classList.remove('show');
     document.getElementById('statusDot').classList.remove('error');
 
+    // 过滤隐藏项
+    const hidden = getHiddenItems();
+    data.items = data.items.filter(it => !hidden.includes(it.code));
+
     // 记录旧价格用于 flash 动画
     const newPrices = {};
     data.items.forEach(it => { newPrices[it.code] = it.price; });
@@ -708,6 +735,17 @@ document.getElementById('submitBtn').addEventListener('click', () => {
   const items = getCustomItems();
   const existIdx = items.findIndex(c => c.code === code);
 
+  // 如果是之前隐藏的配置项，取消隐藏
+  const hidden = getHiddenItems();
+  if (hidden.includes(code)) {
+    saveHiddenItems(hidden.filter(h => h !== code));
+    fetchPrices();
+    codeInput.value = ''; nameInput.value = ''; sharesInput.value = ''; costInput.value = '';
+    document.getElementById('addPanel').classList.remove('show');
+    document.getElementById('addBtn').classList.remove('active');
+    return;
+  }
+
   const entry = { name, code, shares: shares > 0 ? shares : 0, cost: cost > 0 ? cost : 0 };
 
   if (existIdx >= 0) {
@@ -755,7 +793,7 @@ const cardsContainer = document.getElementById('cards');
 
 cardsContainer.addEventListener('touchstart', (e) => {
   const card = e.target.closest('.card');
-  if (!card || !card.classList.contains('custom')) return;
+  if (!card) return;
   swipeCard = card;
   swipeStartX = e.touches[0].clientX;
   swipeStartY = e.touches[0].clientY;
@@ -796,7 +834,7 @@ cardsContainer.addEventListener('touchend', () => {
     swipeCard.style.transition = 'transform 0.3s ease, opacity 0.25s';
     swipeCard.addEventListener('transitionend', function handler() {
       swipeCard.removeEventListener('transitionend', handler);
-      if (code) removeCustom(code);
+      if (code) removeItem(code);
     });
   } else {
     swipeCard.style.transform = '';
