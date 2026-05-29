@@ -91,11 +91,30 @@
     border-radius: 16px;
     padding: 20px 22px;
     box-shadow: var(--shadow);
-    transition: transform 0.15s;
+    transition: transform 0.15s, opacity 0.15s;
+    position: relative;
+    overflow: hidden;
   }
 
   .card:active {
     transform: scale(0.987);
+  }
+
+  .card.swiping { transition: none; }
+
+  .card-swipe-bg {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #fef0ef;
+    display: flex; align-items: center;
+    justify-content: flex-end;
+    padding-right: 28px;
+    font-size: 14px; font-weight: 600;
+    color: var(--up-color);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    border-radius: 16px;
   }
 
   .card-header {
@@ -210,26 +229,28 @@
 
   .offline-banner.show { display: block; }
 
-  /* 底部工具栏 */
+  /* 底部工具栏 — 沉浸光感 */
   .bottom-bar {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
-    justify-content: center;
-    gap: 16px;
-    padding: 10px 20px 16px;
-    background: var(--card-bg);
-    border-top: 1px solid var(--border);
+    gap: 6px;
+    padding: 6px 18px;
+    background: rgba(255, 255, 255, 0.68);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border-radius: 28px;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.07), 0 0 0 1px rgba(255,255,255,0.6) inset;
     z-index: 100;
   }
 
   .bar-btn {
-    width: 44px; height: 44px;
+    width: 42px; height: 42px;
     border-radius: 50%;
     border: none;
-    background: var(--bg);
+    background: transparent;
     font-size: 22px;
     color: var(--text-secondary);
     cursor: pointer;
@@ -247,7 +268,7 @@
   .add-panel {
     display: none;
     position: fixed;
-    bottom: 76px;
+    bottom: 90px;
     left: 14px;
     right: 14px;
     z-index: 99;
@@ -379,9 +400,8 @@
   }
 
   @media (min-width: 768px) {
-    .cards, .add-panel, .bottom-bar-inner { max-width: 520px; margin-left: auto; margin-right: auto; }
+    .cards { max-width: 520px; margin-left: auto; margin-right: auto; }
     .add-panel { left: 50%; right: auto; transform: translateX(-50%); width: 100%; max-width: 520px; }
-    .bottom-bar { padding-left: 0; padding-right: 0; }
     .kline-sheet {
       width: 520px;
       margin: 0 auto;
@@ -499,8 +519,10 @@ function renderCard(item) {
   const unit = item.code === 'fx_susdcny' ? '' :
                item.code === 'hf_XAU' ? ' $/oz' : ' 元/克';
 
-  const delBtn = isCustom(item.code) ?
+  const custom = isCustom(item.code);
+  const delBtn = custom ?
     `<button class="delete-btn" onclick="event.stopPropagation();removeCustom('${item.code}')">&times;</button>` : '';
+  const swipeBg = custom ? '<div class="card-swipe-bg">释放删除</div>' : '';
 
   // 持仓信息
   const shares = item.shares || 0;
@@ -537,6 +559,7 @@ function renderCard(item) {
   if (isClosed) {
     return `
     <div class="card${customCls}" data-code="${item.code}" style="opacity:0.5">
+      ${swipeBg}
       <div class="card-header">
         <span class="card-name">${item.name}${delBtn}</span>
         <span class="card-note">${item.note || item.code}</span>
@@ -567,6 +590,7 @@ function renderCard(item) {
 
   return `
     <div class="card${flashCls}${customCls}" data-code="${item.code}">
+      ${swipeBg}
       <div class="card-header">
         <span class="card-name">${item.name}${delBtn}</span>
         <span class="card-note">${item.note || item.code}</span>
@@ -716,6 +740,83 @@ document.getElementById('submitBtn').addEventListener('click', () => {
     if (e.key === 'Enter') document.getElementById('submitBtn').click();
   });
 });
+
+// ═══════════════════════════════════════
+// 右滑删除
+// ═══════════════════════════════════════
+
+let swipeCard = null;
+let swipeStartX = 0;
+let swipeStartY = 0;
+let swipeOffset = 0;
+let swipeActive = false;
+
+const cardsContainer = document.getElementById('cards');
+
+cardsContainer.addEventListener('touchstart', (e) => {
+  const card = e.target.closest('.card');
+  if (!card || !card.classList.contains('custom')) return;
+  swipeCard = card;
+  swipeStartX = e.touches[0].clientX;
+  swipeStartY = e.touches[0].clientY;
+  swipeOffset = 0;
+  swipeActive = false;
+}, { passive: true });
+
+cardsContainer.addEventListener('touchmove', (e) => {
+  if (!swipeCard) return;
+  const dx = e.touches[0].clientX - swipeStartX;
+  const dy = e.touches[0].clientY - swipeStartY;
+
+  if (!swipeActive && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+    swipeActive = true;
+    swipeCard.classList.add('swiping');
+  }
+  if (!swipeActive) return;
+
+  // 只允许右滑
+  swipeOffset = Math.max(0, Math.min(dx, 140));
+  swipeCard.style.transform = `translateX(${swipeOffset}px)`;
+  swipeCard.style.opacity = 1 - swipeOffset / 300;
+
+  const bg = swipeCard.querySelector('.card-swipe-bg');
+  if (bg) {
+    bg.style.opacity = Math.min(1, swipeOffset / 60);
+  }
+}, { passive: true });
+
+cardsContainer.addEventListener('touchend', () => {
+  if (!swipeCard) return;
+  swipeCard.classList.remove('swiping');
+
+  if (swipeOffset > 80) {
+    const code = swipeCard.dataset.code;
+    swipeCard.style.transform = 'translateX(110%)';
+    swipeCard.style.opacity = '0';
+    swipeCard.style.transition = 'transform 0.3s ease, opacity 0.25s';
+    swipeCard.addEventListener('transitionend', function handler() {
+      swipeCard.removeEventListener('transitionend', handler);
+      if (code) removeCustom(code);
+    });
+  } else {
+    swipeCard.style.transform = '';
+    swipeCard.style.opacity = '';
+    swipeCard.style.transition = 'transform 0.25s ease, opacity 0.2s';
+  }
+
+  swipeCard = null;
+  swipeOffset = 0;
+  swipeActive = false;
+});
+
+cardsContainer.addEventListener('click', (e) => {
+  // 如果刚滑动过，阻止点击事件触发 K 线
+  if (swipeActive) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }
+}, true); // 捕获阶段优先拦截
 
 // ═══════════════════════════════════════
 // K线图
