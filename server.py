@@ -19,7 +19,7 @@ def now_str(fmt="%H:%M:%S"):
     return time.strftime(fmt, time.gmtime(time.time() + 28800))
 
 import requests
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 # Windows 控制台 UTF-8
 if sys.platform == "win32":
@@ -336,9 +336,38 @@ def health():
     return jsonify({"status": "ok", "time": now_str()})
 
 
+def guess_type(code):
+    """根据代码前缀猜测品种类型"""
+    if code.startswith("sh") or code.startswith("sz"):
+        return "sina_stock"
+    if code.startswith("hf_"):
+        return "sina_hf"
+    if code.startswith("fx_"):
+        return "sina_forex"
+    if code.startswith("gjs_"):
+        return "sina_commodity"
+    if code.startswith("nf_"):
+        return "sina_stock"
+    return "sina_stock"
+
+
 @app.route("/api/prices")
 def api_prices():
     config = load_config()
+
+    # 解析前端传入的自选代码
+    custom_codes_str = request.args.get("codes", "")
+    custom_items = []
+    if custom_codes_str:
+        for code in custom_codes_str.split(","):
+            code = code.strip()
+            if code and code != "computed_jicun":
+                custom_items.append({
+                    "name": code, "code": code,
+                    "type": guess_type(code), "note": "自选",
+                })
+        if custom_items:
+            fetch_sina_prices(custom_items)
 
     with cache_lock:
         data = list(price_cache.values())
@@ -360,7 +389,18 @@ def api_prices():
             "time": now_str(),
         })
 
-    # 按 config 顺序排列
+    # 去掉自定义代码中的未找到项，补占位
+    for ci in custom_items:
+        if ci["code"] not in existing_codes:
+            data.append({
+                "name": ci["code"], "code": ci["code"],
+                "note": ci.get("note", "自选"),
+                "price": 0, "change": 0, "change_pct": 0,
+                "high": 0, "low": 0, "open": 0, "prev_close": 0,
+                "time": now_str(),
+            })
+
+    # 按 config 顺序排列，自定义项放最后
     code_order = [item["code"] for item in config.get("items", [])]
     data.sort(key=lambda x: code_order.index(x["code"]) if x["code"] in code_order else 999)
 

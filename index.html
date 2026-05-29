@@ -209,8 +209,81 @@
 
   .offline-banner.show { display: block; }
 
+  /* 添加按钮 */
+  .add-btn {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--card-bg);
+    font-size: 20px;
+    color: var(--accent);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+    line-height: 1;
+  }
+  .add-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .add-btn.active { transform: rotate(45deg); background: var(--up-color); color: #fff; border-color: var(--up-color); }
+
+  /* 添加面板 */
+  .add-panel {
+    display: none;
+    margin: 0 14px 4px;
+    background: var(--card-bg);
+    border-radius: 14px;
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .add-panel.show { display: block; }
+  .add-panel-row {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .add-panel input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 14px;
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+  }
+  .add-panel input:focus { border-color: var(--accent); }
+  .add-panel .code-input { max-width: 140px; }
+  .add-panel .submit-btn {
+    padding: 10px 18px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .add-panel .hint {
+    font-size: 11px; color: var(--text-secondary); margin-top: 8px;
+  }
+  .add-panel .hint code {
+    background: var(--bg); padding: 1px 6px; border-radius: 4px; font-size: 11px;
+  }
+
+  /* 删除按钮 */
+  .delete-btn {
+    display: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: #fdd;
+    color: var(--up-color);
+    font-size: 14px;
+    cursor: pointer;
+    line-height: 1;
+    margin-left: 8px;
+  }
+  .card.custom .delete-btn { display: inline-flex; align-items: center; justify-content: center; }
+
   @media (min-width: 768px) {
-    .cards { max-width: 520px; margin: 0 auto; }
+    .cards, .add-panel { max-width: 520px; margin-left: auto; margin-right: auto; }
   }
 </style>
 </head>
@@ -221,7 +294,17 @@
   <div class="status-bar">
     <span class="status-dot" id="statusDot"></span>
     <span class="refresh-countdown" id="countdown">5s</span>
+    <button class="add-btn" id="addBtn" title="添加自选">+</button>
   </div>
+</div>
+
+<div class="add-panel" id="addPanel">
+  <div class="add-panel-row">
+    <input class="code-input" id="codeInput" placeholder="代码 (如 sh600036)" autocomplete="off">
+    <input id="nameInput" placeholder="名称 (可选)">
+    <button class="submit-btn" id="submitBtn">添加</button>
+  </div>
+  <div class="hint">上交所 <code>sh</code> + 代码，深交所 <code>sz</code> + 代码，如 <code>sh600036</code></div>
 </div>
 
 <div class="offline-banner" id="offlineBanner">网络连接异常，正在重试...</div>
@@ -259,21 +342,49 @@ function formatPct(v) {
   return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
 }
 
+const STORAGE_KEY = 'price_monitor_customs';
+
+function getCustomItems() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveCustomItems(items) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+
+function isCustom(code) {
+  return getCustomItems().some(c => c.code === code);
+}
+
+function removeCustom(code) {
+  const items = getCustomItems().filter(c => c.code !== code);
+  saveCustomItems(items);
+  fetchPrices();
+}
+
 function renderCard(item) {
   const changeCls = getChangeClass(item.change);
   const oldPrice = lastPrices[item.code];
   const priceChanged = oldPrice != null && oldPrice !== item.price;
   const flashCls = priceChanged ? ' flash' : '';
+  const customCls = isCustom(item.code) ? ' custom' : '';
   const isClosed = item.price === 0 && item.code === 'gjs_Au9999';
 
   const unit = item.code === 'fx_susdcny' ? '' :
                item.code === 'hf_XAU' ? ' $/oz' : ' 元/克';
 
+  const delBtn = isCustom(item.code) ?
+    `<button class="delete-btn" onclick="event.stopPropagation();removeCustom('${item.code}')">&times;</button>` : '';
+
   if (isClosed) {
     return `
-    <div class="card" data-code="${item.code}" style="opacity:0.5">
+    <div class="card${customCls}" data-code="${item.code}" style="opacity:0.5">
       <div class="card-header">
-        <span class="card-name">${item.name}</span>
+        <span class="card-name">${item.name}${delBtn}</span>
         <span class="card-note">${item.note || item.code}</span>
       </div>
       <div class="card-body">
@@ -290,35 +401,41 @@ function renderCard(item) {
     </div>`;
   }
 
+  const emptyDetail = item.high === 0 && item.low === 0 && item.open === 0;
+  const detailHtml = emptyDetail ? '' : `
+    <div class="card-detail">
+      <div class="detail-item"><span class="detail-label">最高</span><span class="detail-value">${formatNum(item.high)}</span></div>
+      <div class="detail-item"><span class="detail-label">最低</span><span class="detail-value">${formatNum(item.low)}</span></div>
+      <div class="detail-item"><span class="detail-label">开盘</span><span class="detail-value">${formatNum(item.open)}</span></div>
+      <div class="detail-item"><span class="detail-label">昨收</span><span class="detail-value">${formatNum(item.prev_close)}</span></div>
+    </div>`;
+
   return `
-    <div class="card${flashCls}" data-code="${item.code}">
+    <div class="card${flashCls}${customCls}" data-code="${item.code}">
       <div class="card-header">
-        <span class="card-name">${item.name}</span>
+        <span class="card-name">${item.name}${delBtn}</span>
         <span class="card-note">${item.note || item.code}</span>
       </div>
       <div class="card-body">
-        <span class="price-main ${changeCls}">${formatNum(item.price)}<span style="font-size:14px;font-weight:400;opacity:0.6">${unit}</span></span>
+        <span class="price-main ${changeCls}">${item.price > 0 ? formatNum(item.price) : '--'}<span style="font-size:14px;font-weight:400;opacity:0.6">${unit}</span></span>
         <div class="price-change">
-          <span class="change-value ${changeCls}">${formatChange(item.change)}</span>
-          <span class="change-pct ${changeCls}">${formatPct(item.change_pct)}</span>
+          <span class="change-value ${changeCls}">${item.price > 0 ? formatChange(item.change) : '--'}</span>
+          <span class="change-pct ${changeCls}">${item.price > 0 ? formatPct(item.change_pct) : '--'}</span>
         </div>
       </div>
-      <div class="card-detail">
-        <div class="detail-item"><span class="detail-label">最高</span><span class="detail-value">${formatNum(item.high)}</span></div>
-        <div class="detail-item"><span class="detail-label">最低</span><span class="detail-value">${formatNum(item.low)}</span></div>
-        <div class="detail-item"><span class="detail-label">开盘</span><span class="detail-value">${formatNum(item.open)}</span></div>
-        <div class="detail-item"><span class="detail-label">昨收</span><span class="detail-value">${formatNum(item.prev_close)}</span></div>
-      </div>
+      ${detailHtml}
       <div class="card-footer">
         <span>${item.code}</span>
-        <span>更新 ${item.time}</span>
+        <span>${item.time ? '更新 ' + item.time : ''}</span>
       </div>
     </div>`;
 }
 
 async function fetchPrices() {
   try {
-    const resp = await fetch('/api/prices');
+    const customs = getCustomItems();
+    const codesParam = customs.length > 0 ? '?codes=' + customs.map(c => c.code).join(',') : '';
+    const resp = await fetch('/api/prices' + codesParam);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
 
@@ -373,6 +490,48 @@ document.addEventListener('visibilitychange', () => {
     countdown = REFRESH_INTERVAL / 1000;
     updateCountdown();
   }
+});
+
+// + 按钮：切换添加面板
+document.getElementById('addBtn').addEventListener('click', () => {
+  const panel = document.getElementById('addPanel');
+  const btn = document.getElementById('addBtn');
+  panel.classList.toggle('show');
+  btn.classList.toggle('active');
+});
+
+// 提交按钮：添加自选
+document.getElementById('submitBtn').addEventListener('click', () => {
+  const codeInput = document.getElementById('codeInput');
+  const nameInput = document.getElementById('nameInput');
+  const code = codeInput.value.trim();
+  if (!code) return;
+
+  const name = nameInput.value.trim() || code;
+  const items = getCustomItems();
+  if (items.some(c => c.code === code)) {
+    alert('该代码已存在');
+    return;
+  }
+  items.push({ name, code });
+  saveCustomItems(items);
+
+  // 清空输入
+  codeInput.value = '';
+  nameInput.value = '';
+
+  // 收起面板并刷新
+  document.getElementById('addPanel').classList.remove('show');
+  document.getElementById('addBtn').classList.remove('active');
+  fetchPrices();
+});
+
+// 回车键提交
+document.getElementById('codeInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('submitBtn').click();
+});
+document.getElementById('nameInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('submitBtn').click();
 });
 </script>
 

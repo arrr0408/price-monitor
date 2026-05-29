@@ -6,6 +6,7 @@ import json
 import os
 import time
 from http.server import BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
 
 import requests
 
@@ -94,11 +95,31 @@ PARSERS = {
 }
 
 
-def fetch_sina():
-    items = CONFIG["items"]
+def guess_type(code):
+    if code.startswith("sh") or code.startswith("sz"):
+        return "sina_stock"
+    if code.startswith("hf_"):
+        return "sina_hf"
+    if code.startswith("fx_"):
+        return "sina_forex"
+    if code.startswith("gjs_"):
+        return "sina_commodity"
+    if code.startswith("nf_"):
+        return "sina_stock"
+    return "sina_stock"
+
+
+def fetch_sina(extra_codes=None):
+    items = list(CONFIG["items"])
+    # 附加自定义代码
+    if extra_codes:
+        for code in extra_codes:
+            if not any(it["code"] == code for it in items):
+                items.append({"name": code, "code": code, "type": guess_type(code), "note": "自选"})
+
     codes = [it["code"] for it in items if it["code"] != "computed_jicun"]
     if not codes:
-        return {}
+        return {}, []
 
     url = SINA_URL + ",".join(codes)
     try:
@@ -122,10 +143,10 @@ def fetch_sina():
                             except Exception:
                                 pass
                     break
-        return results
+        return results, items
     except Exception as e:
         print(f"fetch error: {e}")
-        return {}
+        return {}, items
 
 
 def compute_jicun(data):
@@ -171,8 +192,8 @@ def compute_jicun(data):
     }
 
 
-def build_response():
-    data = fetch_sina()
+def build_response(extra_codes=None):
+    data, all_items = fetch_sina(extra_codes)
 
     # 积存金
     jicun = compute_jicun(data)
@@ -190,19 +211,35 @@ def build_response():
             "time": time.strftime("%H:%M:%S"),
         }
 
-    # 按 config 顺序排列
-    code_order = [it["code"] for it in CONFIG["items"]]
+    code_order = [it["code"] for it in all_items]
     remaining = [v for k, v in data.items() if k not in ("computed_jicun",)]
     items.extend(remaining)
     items.sort(key=lambda x: code_order.index(x["code"]) if x["code"] in code_order else 999)
+    items.extend(remaining)
+    items.sort(key=lambda x: code_order.index(x["code"]) if x["code"] in code_order else 999)
 
-    return json.dumps({"items": items, "server_time": time.strftime("%H:%M:%S")}, ensure_ascii=False)
+    # 自定义代码中未返回数据的补占位
+    now = time.strftime("%H:%M:%S")
+    for ci in (extra_codes or []):
+        if ci not in data:
+            items.append({
+                "name": ci, "code": ci, "note": "自选",
+                "price": 0, "change": 0, "change_pct": 0,
+                "high": 0, "low": 0, "open": 0, "prev_close": 0,
+                "time": now,
+            })
+
+    return json.dumps({"items": items, "server_time": now}, ensure_ascii=False)
 
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
-            body = build_response()
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query)
+            codes_str = params.get("codes", [""])[0]
+            extra_codes = [c.strip() for c in codes_str.split(",") if c.strip()] if codes_str else None
+            body = build_response(extra_codes)
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Access-Control-Allow-Origin", "*")
