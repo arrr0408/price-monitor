@@ -408,6 +408,55 @@ def api_prices():
 
 
 # ═══════════════════════════════════════════
+# K线数据
+# ═══════════════════════════════════════════
+
+KLINE_CACHE = {}
+KLINE_CACHE_TTL = 3600  # 1小时缓存
+
+KLINE_URL = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
+
+
+@app.route("/api/kline")
+def api_kline():
+    code = request.args.get("code", "").strip()
+    days = request.args.get("days", "120")
+
+    if not code:
+        return jsonify({"error": "缺少 code 参数"}), 400
+
+    # computed_jicun 映射到 Au99.99 的K线
+    fetch_code = "gjs_Au9999" if code == "computed_jicun" else code
+
+    # 检查缓存
+    cache_key = f"{fetch_code}:{days}"
+    cached = KLINE_CACHE.get(cache_key)
+    if cached and time.time() - cached["ts"] < KLINE_CACHE_TTL:
+        return jsonify(cached["data"])
+
+    try:
+        resp = requests.get(KLINE_URL, params={
+            "symbol": fetch_code,
+            "scale": 240,
+            "ma": "5,10,20",
+            "datalen": days,
+        }, headers={"Referer": "https://finance.sina.com.cn"}, timeout=10)
+        resp.encoding = "utf-8"
+        data = resp.json()
+
+        if not isinstance(data, list):
+            data = []
+
+        result = {"items": data, "code": code, "fetch_code": fetch_code}
+
+        KLINE_CACHE[cache_key] = {"data": result, "ts": time.time()}
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e), "items": []}), 500
+
+
+# ═══════════════════════════════════════════
 # 启动
 # ═══════════════════════════════════════════
 

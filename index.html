@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="价格监控">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 <title>实时价格监控</title>
 <style>
   :root {
@@ -305,10 +306,74 @@
 
   .cards { padding-bottom: 90px; }
 
+  /* K线模态层 */
+  .kline-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    display: flex;
+    align-items: flex-end;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .kline-overlay.show { opacity: 1; pointer-events: auto; }
+
+  .kline-sheet {
+    width: 100%;
+    height: 80vh;
+    background: var(--card-bg);
+    border-radius: 20px 20px 0 0;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(100%);
+    transition: transform 0.3s ease-out;
+  }
+  .kline-overlay.show .kline-sheet { transform: translateY(0); }
+
+  .kline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 8px;
+    flex-shrink: 0;
+  }
+  .kline-title { font-size: 16px; font-weight: 700; }
+  .kline-close {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: var(--bg);
+    font-size: 18px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1;
+  }
+  .kline-chart {
+    flex: 1;
+    min-height: 0;
+  }
+  .kline-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
   @media (min-width: 768px) {
     .cards, .add-panel, .bottom-bar-inner { max-width: 520px; margin-left: auto; margin-right: auto; }
     .add-panel { left: 50%; right: auto; transform: translateX(-50%); width: 100%; max-width: 520px; }
     .bottom-bar { padding-left: 0; padding-right: 0; }
+    .kline-sheet {
+      width: 520px;
+      margin: 0 auto;
+      border-radius: 20px;
+      height: 75vh;
+    }
+    .kline-overlay { align-items: center; }
   }
 </style>
 </head>
@@ -337,6 +402,16 @@
 
 <div class="bottom-bar">
   <button class="bar-btn" id="addBtn" title="添加自选">+</button>
+</div>
+
+<div class="kline-overlay" id="klineOverlay">
+  <div class="kline-sheet">
+    <div class="kline-header">
+      <span class="kline-title" id="klineTitle">K线图</span>
+      <button class="kline-close" id="klineClose">&times;</button>
+    </div>
+    <div class="kline-chart" id="klineChart"><div class="kline-loading">加载中...</div></div>
+  </div>
 </div>
 
 <script>
@@ -560,6 +635,188 @@ document.getElementById('codeInput').addEventListener('keydown', (e) => {
 });
 document.getElementById('nameInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('submitBtn').click();
+});
+
+// ═══════════════════════════════════════
+// K线图
+// ═══════════════════════════════════════
+
+let klineChart = null;
+const overlay = document.getElementById('klineOverlay');
+const klineChartDom = document.getElementById('klineChart');
+
+function closeKline() {
+  overlay.classList.remove('show');
+  if (klineChart) {
+    klineChart.dispose();
+    klineChart = null;
+  }
+}
+
+document.getElementById('klineClose').addEventListener('click', closeKline);
+overlay.addEventListener('click', (e) => {
+  if (e.target === overlay) closeKline();
+});
+
+// 卡片点击 → 打开K线（事件委托）
+document.getElementById('cards').addEventListener('click', (e) => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const code = card.dataset.code;
+  if (!code) return;
+  const nameEl = card.querySelector('.card-name');
+  const name = nameEl ? nameEl.textContent.replace('×', '').trim() : code;
+  openKline(code, name);
+});
+
+async function openKline(code, name) {
+  document.getElementById('klineTitle').textContent = name + ' K线';
+  klineChartDom.innerHTML = '<div class="kline-loading">加载中...</div>';
+  overlay.classList.add('show');
+
+  try {
+    const resp = await fetch(`/api/kline?code=${code}&days=120`);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    const items = data.items || [];
+
+    if (items.length === 0) {
+      klineChartDom.innerHTML = '<div class="kline-loading">暂无K线数据</div>';
+      return;
+    }
+
+    renderKline(name, items);
+  } catch (err) {
+    klineChartDom.innerHTML = '<div class="kline-loading">加载失败: ' + err.message + '</div>';
+  }
+}
+
+function renderKline(name, rawData) {
+  // rawData: [{day, open, high, low, close, volume, ma_price5, ma_price10, ma_price20}, ...]
+  const dates = [];
+  const ohlc = [];
+  const ma5 = [];
+  const ma10 = [];
+  const ma20 = [];
+  const volumes = [];
+
+  rawData.forEach(d => {
+    dates.push(d.day);
+    ohlc.push([parseFloat(d.open), parseFloat(d.close), parseFloat(d.low), parseFloat(d.high)]);
+    ma5.push(d.ma_price5 != null ? parseFloat(d.ma_price5) : null);
+    ma10.push(d.ma_price10 != null ? parseFloat(d.ma_price10) : null);
+    ma20.push(d.ma_price20 != null ? parseFloat(d.ma_price20) : null);
+    volumes.push([ohlc.length - 1, parseFloat(d.volume) || 0, ohlc[ohlc.length - 1][1] >= ohlc[ohlc.length - 1][0] ? 1 : -1]);
+  });
+
+  // Dispose previous chart instance if any
+  const existing = echarts.getInstanceByDom(klineChartDom);
+  if (existing) existing.dispose();
+
+  klineChart = echarts.init(klineChartDom, null, { renderer: 'canvas' });
+
+  const option = {
+    animation: false,
+    grid: [
+      { left: 10, right: 10, top: 10, height: '65%' },
+      { left: 10, right: 10, top: '78%', height: '14%' },
+    ],
+    xAxis: [
+      {
+        type: 'category', data: dates, gridIndex: 0,
+        axisLine: { lineStyle: { color: '#e8e8ef' } },
+        axisLabel: { color: '#8e8e9a', fontSize: 10 },
+        axisTick: { show: false },
+      },
+      {
+        type: 'category', data: dates, gridIndex: 1,
+        axisLine: { show: false },
+        axisLabel: { show: false },
+        axisTick: { show: false },
+      },
+    ],
+    yAxis: [
+      {
+        type: 'value', gridIndex: 0,
+        scale: true,
+        splitLine: { lineStyle: { color: '#f2f3f7' } },
+        axisLabel: { color: '#8e8e9a', fontSize: 10 },
+      },
+      {
+        type: 'value', gridIndex: 1,
+        axisLabel: { show: false },
+        splitLine: { show: false },
+      },
+    ],
+    dataZoom: [
+      {
+        type: 'slider', xAxisIndex: 0, height: 20, bottom: 6,
+        borderColor: '#e8e8ef',
+        backgroundColor: '#f2f3f7',
+        dataBackground: {
+          lineStyle: { color: '#d0d0d8' },
+          areaStyle: { color: 'rgba(91,106,240,0.06)' },
+        },
+        selectedDataBackground: {
+          lineStyle: { color: '#5b6af0' },
+          areaStyle: { color: 'rgba(91,106,240,0.12)' },
+        },
+        handleStyle: { color: '#5b6af0' },
+        moveHandleStyle: { color: '#5b6af0' },
+      },
+      { type: 'inside', xAxisIndex: 0 },
+    ],
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      backgroundColor: '#fff',
+      borderColor: '#e8e8ef',
+      textStyle: { color: '#1a1a2e', fontSize: 12 },
+    },
+    series: [
+      {
+        name: 'K线', type: 'candlestick', xAxisIndex: 0, yAxisIndex: 0,
+        data: ohlc,
+        itemStyle: { color: '#e53935', color0: '#1db88f', borderColor: '#e53935', borderColor0: '#1db88f' },
+        markPoint: {
+          data: [
+            { name: '最高', type: 'max', valueDim: 'highest', symbolSize: 30, itemStyle: { color: '#e53935' } },
+            { name: '最低', type: 'min', valueDim: 'lowest', symbolSize: 30, itemStyle: { color: '#1db88f' } },
+          ],
+        },
+      },
+      {
+        name: 'MA5', type: 'line', xAxisIndex: 0, yAxisIndex: 0,
+        data: ma5, smooth: true, symbol: 'none',
+        lineStyle: { color: '#f5a623', width: 1 },
+      },
+      {
+        name: 'MA10', type: 'line', xAxisIndex: 0, yAxisIndex: 0,
+        data: ma10, smooth: true, symbol: 'none',
+        lineStyle: { color: '#4a90d9', width: 1 },
+      },
+      {
+        name: 'MA20', type: 'line', xAxisIndex: 0, yAxisIndex: 0,
+        data: ma20, smooth: true, symbol: 'none',
+        lineStyle: { color: '#7b68ee', width: 1 },
+      },
+      {
+        name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
+        data: volumes,
+        itemStyle: {
+          color: function (p) { return p.data[2] >= 0 ? '#f9ccd3' : '#c5ede0'; },
+        },
+      },
+    ],
+  };
+
+  klineChart.setOption(option);
+  window.addEventListener('resize', () => klineChart && klineChart.resize());
+}
+
+// 页面卸载时清理
+window.addEventListener('beforeunload', () => {
+  if (klineChart) klineChart.dispose();
 });
 </script>
 
