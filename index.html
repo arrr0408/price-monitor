@@ -111,6 +111,16 @@
     transition: background 0.3s, box-shadow 0.3s;
   }
 
+  .card.deleting {
+    overflow: hidden;
+    max-height: 300px;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    transition: max-height 0.3s ease, margin 0.3s ease, padding 0.3s ease, opacity 0.25s;
+  }
+
   .card-swipe-bg {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -356,6 +366,20 @@
   .pos-label { color: var(--text-secondary); margin-right: 4px; }
   .pos-value { font-weight: 600; color: var(--text); }
 
+  .edit-hold-btn {
+    margin-left: auto;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .edit-hold-btn:active { background: var(--accent); color: #fff; }
+
   .cards { padding-bottom: 90px; }
 
   /* K线模态层 */
@@ -523,6 +547,26 @@ function isCustom(code) {
   return getCustomItems().some(c => c.code === code);
 }
 
+function editHoldings(code) {
+  const items = getCustomItems();
+  const item = items.find(c => c.code === code);
+  if (!item) return;
+
+  document.getElementById('codeInput').value = item.code;
+  document.getElementById('nameInput').value = item.name !== item.code ? item.name : '';
+  document.getElementById('sharesInput').value = item.shares || '';
+  document.getElementById('costInput').value = item.cost || '';
+  document.getElementById('submitBtn').textContent = '更新';
+
+  const panel = document.getElementById('addPanel');
+  const btn = document.getElementById('addBtn');
+  panel.classList.add('show');
+  btn.classList.add('active');
+
+  // 聚焦到持股数输入框
+  setTimeout(() => document.getElementById('sharesInput').focus(), 100);
+}
+
 function removeItem(code) {
   // 自定义项：从列表删除
   const customs = getCustomItems().filter(c => c.code !== code);
@@ -556,6 +600,7 @@ function renderCard(item) {
   // 持仓信息
   const shares = item.shares || 0;
   const cost = item.cost || 0;
+  const editBtn = `<button class="edit-hold-btn" onclick="event.stopPropagation();editHoldings('${item.code}')" title="编辑持仓">✎</button>`;
   let positionHtml = '';
   if (shares > 0 && cost > 0 && item.price > 0) {
     const marketValue = shares * item.price;
@@ -572,6 +617,7 @@ function renderCard(item) {
         <span class="pos-label">成本</span><span class="pos-value">¥${cost.toFixed(2)}</span>
         <span class="pos-label" style="margin-left:12px;">盈亏</span>
         <span class="pos-value ${profitCls}">${profit >= 0 ? '+' : ''}¥${profit.toFixed(0)} (${profitPct >= 0 ? '+' : ''}${profitPct.toFixed(2)}%)</span>
+        ${editBtn}
       </div>
     </div>`;
   } else if (shares > 0 && item.price > 0) {
@@ -581,6 +627,7 @@ function renderCard(item) {
       <div class="pos-row">
         <span class="pos-label">持仓</span><span class="pos-value">${shares}股</span>
         <span class="pos-label" style="margin-left:12px;">市值</span><span class="pos-value">¥${marketValue.toFixed(0)}</span>
+        ${editBtn}
       </div>
     </div>`;
   }
@@ -721,8 +768,17 @@ document.addEventListener('visibilitychange', () => {
 document.getElementById('addBtn').addEventListener('click', () => {
   const panel = document.getElementById('addPanel');
   const btn = document.getElementById('addBtn');
+  const closing = panel.classList.contains('show');
   panel.classList.toggle('show');
   btn.classList.toggle('active');
+  if (closing) {
+    // 关闭面板时清空并重置
+    document.getElementById('codeInput').value = '';
+    document.getElementById('nameInput').value = '';
+    document.getElementById('sharesInput').value = '';
+    document.getElementById('costInput').value = '';
+    document.getElementById('submitBtn').textContent = '添加';
+  }
 });
 
 // 提交按钮：添加/更新自选
@@ -747,6 +803,7 @@ document.getElementById('submitBtn').addEventListener('click', () => {
     saveHiddenItems(hidden.filter(h => h !== code));
     fetchPrices();
     codeInput.value = ''; nameInput.value = ''; sharesInput.value = ''; costInput.value = '';
+    document.getElementById('submitBtn').textContent = '添加';
     document.getElementById('addPanel').classList.remove('show');
     document.getElementById('addBtn').classList.remove('active');
     return;
@@ -771,6 +828,7 @@ document.getElementById('submitBtn').addEventListener('click', () => {
   nameInput.value = '';
   sharesInput.value = '';
   costInput.value = '';
+  document.getElementById('submitBtn').textContent = '添加';
 
   // 收起面板并刷新
   document.getElementById('addPanel').classList.remove('show');
@@ -864,24 +922,18 @@ cardsContainer.addEventListener('touchend', () => {
 
   const code = touchCard.dataset.code;
 
-  if (longPressFired) {
-    // 长按生效：直接删除
-    touchCard.classList.remove('longpress');
-    touchCard.style.transform = 'scale(0.9)';
-    touchCard.style.opacity = '0';
-    touchCard.style.transition = 'transform 0.25s ease, opacity 0.2s';
+  if (longPressFired || (touchSwiping && touchOffset > 80)) {
+    // 删除：卡片收起，下方自然上移
+    touchCard.classList.remove('swiping', 'longpress');
+    const h = touchCard.offsetHeight;
+    touchCard.style.maxHeight = h + 'px';
+    touchCard.style.marginBottom = getComputedStyle(touchCard).marginBottom;
+    // 强制重排后触发动画
+    touchCard.offsetHeight;
+    touchCard.classList.add('deleting');
     touchCard.addEventListener('transitionend', function handler() {
       touchCard.removeEventListener('transitionend', handler);
-      if (code) removeItem(code);
-    });
-  } else if (touchSwiping && touchOffset > 80) {
-    // 滑动达标
-    touchCard.classList.remove('swiping');
-    touchCard.style.transform = 'translateX(110%)';
-    touchCard.style.opacity = '0';
-    touchCard.style.transition = 'transform 0.3s ease, opacity 0.25s';
-    touchCard.addEventListener('transitionend', function handler() {
-      touchCard.removeEventListener('transitionend', handler);
+      touchCard.style.display = 'none';
       if (code) removeItem(code);
     });
   } else {
