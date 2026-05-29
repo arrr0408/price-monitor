@@ -413,6 +413,54 @@ def api_prices():
 
 
 # ═══════════════════════════════════════════
+# 用户状态同步（跨设备）
+# ═══════════════════════════════════════════
+
+USER_STATE_PATH = os.path.join(os.path.dirname(__file__), ".user_state.json")
+user_state = {"hidden": [], "customs": []}
+state_lock = threading.Lock()
+
+
+def load_user_state():
+    global user_state
+    try:
+        if os.path.exists(USER_STATE_PATH):
+            with open(USER_STATE_PATH, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                user_state["hidden"] = saved.get("hidden", [])
+                user_state["customs"] = saved.get("customs", [])
+    except Exception:
+        pass
+
+
+def save_user_state():
+    try:
+        with open(USER_STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(user_state, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+@app.route("/api/state", methods=["GET", "POST"])
+def api_state():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        with state_lock:
+            if "hidden" in data:
+                user_state["hidden"] = data["hidden"]
+            if "customs" in data:
+                user_state["customs"] = data["customs"]
+            save_user_state()
+        return jsonify({"ok": True})
+
+    with state_lock:
+        return jsonify({
+            "hidden": user_state.get("hidden", []),
+            "customs": user_state.get("customs", []),
+        })
+
+
+# ═══════════════════════════════════════════
 # K线数据
 # ═══════════════════════════════════════════
 
@@ -510,6 +558,7 @@ def print_startup_info(port):
 
 if __name__ == "__main__":
     load_prev_closes()
+    load_user_state()
 
     PORT = int(os.environ.get("PORT", 5000))
 

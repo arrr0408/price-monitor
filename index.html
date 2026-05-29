@@ -527,20 +527,59 @@ function formatPct(v) {
 const STORAGE_KEY = 'price_monitor_customs';
 const HIDDEN_KEY = 'price_monitor_hidden';
 
-function getCustomItems() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch (e) { return []; }
+// ── 本地缓存（离线兜底）──
+function getLocal(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key) || fallback); } catch (e) { return JSON.parse(fallback); }
+}
+function setLocal(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
 }
 
-function saveCustomItems(items) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+// ── 服务端状态 ──
+let _serverState = null;
+
+async function loadServerState() {
+  try {
+    const resp = await fetch('/api/state');
+    if (resp.ok) { _serverState = await resp.json(); }
+  } catch (e) {}
+  if (!_serverState) {
+    _serverState = { hidden: getLocal(HIDDEN_KEY, '[]'), customs: getLocal(STORAGE_KEY, '[]') };
+  }
+}
+
+async function saveServerState() {
+  // 同时写本地缓存
+  setLocal(HIDDEN_KEY, _serverState.hidden);
+  setLocal(STORAGE_KEY, _serverState.customs);
+  // 推送到服务端
+  try {
+    await fetch('/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(_serverState),
+    });
+  } catch (e) {}
+}
+
+function getCustomItems() {
+  return (_serverState && _serverState.customs) || getLocal(STORAGE_KEY, '[]');
+}
+
+async function saveCustomItems(items) {
+  if (_serverState) _serverState.customs = items;
+  setLocal(STORAGE_KEY, items);
+  await saveServerState();
 }
 
 function getHiddenItems() {
-  try { return JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]'); } catch (e) { return []; }
+  return (_serverState && _serverState.hidden) || getLocal(HIDDEN_KEY, '[]');
 }
 
-function saveHiddenItems(items) {
-  localStorage.setItem(HIDDEN_KEY, JSON.stringify(items));
+async function saveHiddenItems(items) {
+  if (_serverState) _serverState.hidden = items;
+  setLocal(HIDDEN_KEY, items);
+  await saveServerState();
 }
 
 function isCustom(code) {
@@ -563,21 +602,20 @@ function editHoldings(code) {
   panel.classList.add('show');
   btn.classList.add('active');
 
-  // 聚焦到持股数输入框
   setTimeout(() => document.getElementById('sharesInput').focus(), 100);
 }
 
-function removeItem(code) {
+async function removeItem(code) {
   // 自定义项：从列表删除
   const customs = getCustomItems().filter(c => c.code !== code);
-  saveCustomItems(customs);
+  await saveCustomItems(customs);
   // 默认项：加入隐藏列表
   const configCodes = ['hf_XAU', 'fx_susdcny', 'gjs_Au9999', 'computed_jicun'];
   if (configCodes.includes(code)) {
     const hidden = getHiddenItems();
     if (!hidden.includes(code)) {
       hidden.push(code);
-      saveHiddenItems(hidden);
+      await saveHiddenItems(hidden);
     }
   }
   fetchPrices();
@@ -689,6 +727,12 @@ function renderCard(item) {
 
 async function fetchPrices() {
   try {
+    // 静默同步服务端状态（跨设备）
+    try {
+      const r = await fetch('/api/state');
+      if (r.ok) { const s = await r.json(); _serverState = s; }
+    } catch (e) {}
+
     const customs = getCustomItems();
     const codesParam = customs.length > 0 ? '?codes=' + customs.map(c => c.code).join(',') : '';
     const resp = await fetch('/api/prices' + codesParam);
@@ -752,8 +796,10 @@ countdownTimer = setInterval(() => {
 // 数据拉取定时器
 fetchTimer = setInterval(fetchPrices, REFRESH_INTERVAL);
 
-// 立即拉取一次
-fetchPrices();
+// 先同步服务端状态，再拉取数据
+loadServerState().then(() => {
+  fetchPrices();
+});
 
 // 页面可见性变化时立即刷新
 document.addEventListener('visibilitychange', () => {
@@ -782,7 +828,7 @@ document.getElementById('addBtn').addEventListener('click', () => {
 });
 
 // 提交按钮：添加/更新自选
-document.getElementById('submitBtn').addEventListener('click', () => {
+document.getElementById('submitBtn').addEventListener('click', async () => {
   const codeInput = document.getElementById('codeInput');
   const nameInput = document.getElementById('nameInput');
   const sharesInput = document.getElementById('sharesInput');
@@ -800,8 +846,7 @@ document.getElementById('submitBtn').addEventListener('click', () => {
   // 如果是之前隐藏的配置项，取消隐藏
   const hidden = getHiddenItems();
   if (hidden.includes(code)) {
-    saveHiddenItems(hidden.filter(h => h !== code));
-    fetchPrices();
+    saveHiddenItems(hidden.filter(h => h !== code)).then(() => fetchPrices());
     codeInput.value = ''; nameInput.value = ''; sharesInput.value = ''; costInput.value = '';
     document.getElementById('submitBtn').textContent = '添加';
     document.getElementById('addPanel').classList.remove('show');
@@ -821,7 +866,7 @@ document.getElementById('submitBtn').addEventListener('click', () => {
   } else {
     items.push(entry);
   }
-  saveCustomItems(items);
+  await saveCustomItems(items);
 
   // 清空输入
   codeInput.value = '';
