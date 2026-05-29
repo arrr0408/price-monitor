@@ -33,11 +33,15 @@ def safe_float(s, default=0.0):
         return default
 
 
+def _name(item, api_name):
+    return api_name if item.get("name") == item["code"] else item.get("name", api_name)
+
+
 def parse_hf_xau(fields, item):
     price = safe_float(fields[0])
     prev_close = safe_float(fields[3])
     return {
-        "name": item["name"], "code": item["code"], "note": item.get("note", ""),
+        "name": _name(item, "XAU"), "code": item["code"], "note": item.get("note", ""),
         "price": round(price, 2),
         "change": round(price - prev_close, 2),
         "change_pct": round((price - prev_close) / prev_close * 100, 2) if prev_close else 0,
@@ -50,7 +54,7 @@ def parse_hf_xau(fields, item):
 def parse_fx_susdcny(fields, item):
     price = safe_float(fields[1])
     return {
-        "name": item["name"], "code": item["code"], "note": item.get("note", ""),
+        "name": _name(item, "USDCNY"), "code": item["code"], "note": item.get("note", ""),
         "price": round(price, 4),
         "change": safe_float(fields[10]),
         "change_pct": safe_float(fields[11]),
@@ -63,7 +67,7 @@ def parse_fx_susdcny(fields, item):
 def parse_gjs_au9999(fields, item):
     price = safe_float(fields[1])
     return {
-        "name": item["name"], "code": item["code"], "note": item.get("note", ""),
+        "name": _name(item, "Au99.99"), "code": item["code"], "note": item.get("note", ""),
         "price": round(price, 2),
         "change": safe_float(fields[2]), "change_pct": safe_float(fields[3]),
         "high": safe_float(fields[6]), "low": safe_float(fields[7]),
@@ -77,7 +81,7 @@ def parse_stock(fields, item):
     price = safe_float(fields[3])
     prev_close = safe_float(fields[2])
     return {
-        "name": item["name"], "code": item["code"], "note": item.get("note", ""),
+        "name": _name(item, fields[0]), "code": item["code"], "note": item.get("note", ""),
         "price": round(price, 2),
         "change": round(price - prev_close, 2),
         "change_pct": round((price - prev_close) / prev_close * 100, 2) if prev_close else 0,

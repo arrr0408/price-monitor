@@ -80,12 +80,17 @@ def safe_float(s, default=0.0):
 # 新浪行情解析器
 # ═══════════════════════════════════════════
 
+def _name(item, api_name):
+    """自定义项未提供名称时（name==code），使用 API 返回的真实名称"""
+    return api_name if item.get("name") == item["code"] else item.get("name", api_name)
+
+
 def parse_hf_xau(fields, item):
     """hf_XAU 国际现货金: 最新价,买价,卖价,昨收,最高,最低,时间,开盘,?,0,0,0,日期,名称"""
     price = safe_float(fields[0])
     prev_close = safe_float(fields[3])
     return {
-        "name": item.get("name", "XAU"),
+        "name": _name(item, "XAU"),
         "code": item["code"],
         "note": item.get("note", ""),
         "price": round(price, 2),
@@ -104,7 +109,7 @@ def parse_fx_susdcny(fields, item):
     price = safe_float(fields[1])
     prev_close = safe_float(fields[8])
     return {
-        "name": item.get("name", "USDCNY"),
+        "name": _name(item, "USDCNY"),
         "code": item["code"],
         "note": item.get("note", ""),
         "price": round(price, 4),
@@ -123,7 +128,7 @@ def parse_gjs_au9999(fields, item):
     price = safe_float(fields[1])
     prev_close = safe_float(fields[9]) if len(fields) > 9 else 0
     return {
-        "name": item.get("name", "Au99.99"),
+        "name": _name(item, "Au99.99"),
         "code": item["code"],
         "note": item.get("note", ""),
         "price": round(price, 2),
@@ -142,7 +147,7 @@ def parse_stock(fields, item):
     price = safe_float(fields[3])
     prev_close = safe_float(fields[2])
     return {
-        "name": item.get("name", fields[0]),
+        "name": _name(item, fields[0]),
         "code": item["code"],
         "note": item.get("note", ""),
         "price": round(price, 2),

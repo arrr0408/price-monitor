@@ -550,6 +550,11 @@ async function fetchPrices() {
     const newPrices = {};
     data.items.forEach(it => { newPrices[it.code] = it.price; });
 
+    // 用户自定义名称覆盖 API 名称
+    const nameMap = {};
+    customs.forEach(c => { if (c.name !== c.code) nameMap[c.code] = c.name; });
+    data.items.forEach(it => { if (nameMap[it.code]) it.name = nameMap[it.code]; });
+
     const cardsHtml = data.items.map(renderCard).join('');
     document.getElementById('cards').innerHTML = cardsHtml;
 
