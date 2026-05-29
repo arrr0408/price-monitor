@@ -304,6 +304,21 @@
   }
   .card.custom .delete-btn { display: inline-flex; align-items: center; justify-content: center; }
 
+  /* 持仓信息 */
+  .card-position {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+  }
+  .pos-row {
+    display: flex; align-items: center;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .pos-row:last-child { margin-bottom: 0; }
+  .pos-label { color: var(--text-secondary); margin-right: 4px; }
+  .pos-value { font-weight: 600; color: var(--text); }
+
   .cards { padding-bottom: 90px; }
 
   /* K线模态层 */
@@ -393,7 +408,11 @@
     <input id="nameInput" placeholder="名称 (可选)">
     <button class="submit-btn" id="submitBtn">添加</button>
   </div>
-  <div class="hint">上交所 <code>sh</code> + 代码，深交所 <code>sz</code> + 代码，如 <code>sh600036</code></div>
+  <div class="add-panel-row" style="margin-top:8px;">
+    <input id="sharesInput" placeholder="持股数 (可选)" type="number" step="1" inputmode="numeric">
+    <input id="costInput" placeholder="成本价 (可选)" type="number" step="0.01" inputmode="decimal">
+  </div>
+  <div class="hint">填写持股数和成本价可显示持仓盈亏 · 重复代码将更新</div>
 </div>
 
 <div class="offline-banner" id="offlineBanner">网络连接异常，正在重试...</div>
@@ -483,6 +502,38 @@ function renderCard(item) {
   const delBtn = isCustom(item.code) ?
     `<button class="delete-btn" onclick="event.stopPropagation();removeCustom('${item.code}')">&times;</button>` : '';
 
+  // 持仓信息
+  const shares = item.shares || 0;
+  const cost = item.cost || 0;
+  let positionHtml = '';
+  if (shares > 0 && cost > 0 && item.price > 0) {
+    const marketValue = shares * item.price;
+    const profit = marketValue - shares * cost;
+    const profitPct = (item.price - cost) / cost * 100;
+    const profitCls = profit >= 0 ? 'up' : 'down';
+    positionHtml = `
+    <div class="card-position">
+      <div class="pos-row">
+        <span class="pos-label">持仓</span><span class="pos-value">${shares}股</span>
+        <span class="pos-label" style="margin-left:12px;">市值</span><span class="pos-value">¥${marketValue.toFixed(0)}</span>
+      </div>
+      <div class="pos-row">
+        <span class="pos-label">成本</span><span class="pos-value">¥${cost.toFixed(2)}</span>
+        <span class="pos-label" style="margin-left:12px;">盈亏</span>
+        <span class="pos-value ${profitCls}">${profit >= 0 ? '+' : ''}¥${profit.toFixed(0)} (${profitPct >= 0 ? '+' : ''}${profitPct.toFixed(2)}%)</span>
+      </div>
+    </div>`;
+  } else if (shares > 0 && item.price > 0) {
+    const marketValue = shares * item.price;
+    positionHtml = `
+    <div class="card-position">
+      <div class="pos-row">
+        <span class="pos-label">持仓</span><span class="pos-value">${shares}股</span>
+        <span class="pos-label" style="margin-left:12px;">市值</span><span class="pos-value">¥${marketValue.toFixed(0)}</span>
+      </div>
+    </div>`;
+  }
+
   if (isClosed) {
     return `
     <div class="card${customCls}" data-code="${item.code}" style="opacity:0.5">
@@ -497,6 +548,7 @@ function renderCard(item) {
           <span class="change-pct flat">--</span>
         </div>
       </div>
+      ${positionHtml}
       <div class="card-footer">
         <span>交易时间 周一至周五</span>
         <span>${item.time}</span>
@@ -527,6 +579,7 @@ function renderCard(item) {
         </div>
       </div>
       ${detailHtml}
+      ${positionHtml}
       <div class="card-footer">
         <span>${item.code}</span>
         <span>${item.time ? '更新 ' + item.time : ''}</span>
@@ -550,10 +603,17 @@ async function fetchPrices() {
     const newPrices = {};
     data.items.forEach(it => { newPrices[it.code] = it.price; });
 
-    // 用户自定义名称覆盖 API 名称
-    const nameMap = {};
-    customs.forEach(c => { if (c.name !== c.code) nameMap[c.code] = c.name; });
-    data.items.forEach(it => { if (nameMap[it.code]) it.name = nameMap[it.code]; });
+    // 用户自定义数据覆盖 API 数据
+    const customMap = {};
+    customs.forEach(c => { customMap[c.code] = c; });
+    data.items.forEach(it => {
+      const c = customMap[it.code];
+      if (c) {
+        if (c.name !== it.code) it.name = c.name;
+        it.shares = c.shares || 0;
+        it.cost = c.cost || 0;
+      }
+    });
 
     const cardsHtml = data.items.map(renderCard).join('');
     document.getElementById('cards').innerHTML = cardsHtml;
@@ -608,25 +668,41 @@ document.getElementById('addBtn').addEventListener('click', () => {
   btn.classList.toggle('active');
 });
 
-// 提交按钮：添加自选
+// 提交按钮：添加/更新自选
 document.getElementById('submitBtn').addEventListener('click', () => {
   const codeInput = document.getElementById('codeInput');
   const nameInput = document.getElementById('nameInput');
+  const sharesInput = document.getElementById('sharesInput');
+  const costInput = document.getElementById('costInput');
+
   const code = codeInput.value.trim();
   if (!code) return;
 
   const name = nameInput.value.trim() || code;
+  const shares = parseInt(sharesInput.value) || 0;
+  const cost = parseFloat(costInput.value) || 0;
   const items = getCustomItems();
-  if (items.some(c => c.code === code)) {
-    alert('该代码已存在');
-    return;
+  const existIdx = items.findIndex(c => c.code === code);
+
+  const entry = { name, code, shares: shares > 0 ? shares : 0, cost: cost > 0 ? cost : 0 };
+
+  if (existIdx >= 0) {
+    // 保留原有持股数据（如果新输入为空）
+    const old = items[existIdx];
+    if (!entry.shares) entry.shares = old.shares || 0;
+    if (!entry.cost) entry.cost = old.cost || 0;
+    if (entry.name === code) entry.name = old.name;  // 保留旧名称
+    items[existIdx] = entry;
+  } else {
+    items.push(entry);
   }
-  items.push({ name, code });
   saveCustomItems(items);
 
   // 清空输入
   codeInput.value = '';
   nameInput.value = '';
+  sharesInput.value = '';
+  costInput.value = '';
 
   // 收起面板并刷新
   document.getElementById('addPanel').classList.remove('show');
@@ -635,11 +711,10 @@ document.getElementById('submitBtn').addEventListener('click', () => {
 });
 
 // 回车键提交
-document.getElementById('codeInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('submitBtn').click();
-});
-document.getElementById('nameInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('submitBtn').click();
+['codeInput', 'nameInput', 'sharesInput', 'costInput'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('submitBtn').click();
+  });
 });
 
 // ═══════════════════════════════════════
