@@ -429,6 +429,30 @@
     display: flex; align-items: center; justify-content: center;
     line-height: 1;
   }
+  .kline-periods {
+    display: flex; gap: 4px;
+    background: var(--bg);
+    border-radius: 20px;
+    padding: 3px;
+  }
+  .kline-period {
+    padding: 5px 14px;
+    border-radius: 18px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .kline-period.active {
+    background: #fff;
+    color: var(--accent);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
   .kline-chart {
     flex: 1;
     min-height: 0;
@@ -490,6 +514,12 @@
   <div class="kline-sheet">
     <div class="kline-header">
       <span class="kline-title" id="klineTitle">K线图</span>
+      <div class="kline-periods" id="klinePeriods">
+        <button class="kline-period" data-scale="5">分时</button>
+        <button class="kline-period active" data-scale="240">日K</button>
+        <button class="kline-period" data-scale="1200">周K</button>
+        <button class="kline-period" data-scale="4800">月K</button>
+      </div>
       <button class="kline-close" id="klineClose">&times;</button>
     </div>
     <div class="kline-chart" id="klineChart"><div class="kline-loading">加载中...</div></div>
@@ -1055,6 +1085,7 @@ const KLINE_INTERVAL = 5000; // K线刷新间隔 ms
 let klineChart = null;
 let klineTimer = null;
 let currentKlineCode = '';
+let currentKlinePeriod = '240'; // 默认日K
 const overlay = document.getElementById('klineOverlay');
 const klineChartDom = document.getElementById('klineChart');
 
@@ -1073,6 +1104,30 @@ overlay.addEventListener('click', (e) => {
   if (e.target === overlay) closeKline();
 });
 
+// 周期切换
+document.getElementById('klinePeriods').addEventListener('click', (e) => {
+  const btn = e.target.closest('.kline-period');
+  if (!btn || btn.classList.contains('active')) return;
+  const scale = btn.dataset.scale;
+  currentKlinePeriod = scale;
+
+  // 更新 active 样式
+  document.querySelectorAll('.kline-period').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  // 重新加载数据
+  klineChartDom.innerHTML = '<div class="kline-loading">加载中...</div>';
+  if (klineChart) { klineChart.dispose(); klineChart = null; }
+
+  // 更新定时器：周K/月K不需要实时刷新
+  if (klineTimer) { clearInterval(klineTimer); klineTimer = null; }
+  if (scale === '5' || scale === '240') {
+    klineTimer = setInterval(() => fetchAndRenderKline(currentKlineCode), KLINE_INTERVAL);
+  }
+
+  fetchAndRenderKline(currentKlineCode);
+});
+
 // 卡片点击 → 打开K线（事件委托）
 document.getElementById('cards').addEventListener('click', (e) => {
   const card = e.target.closest('.card');
@@ -1089,19 +1144,26 @@ async function openKline(code, name) {
   closeKline();
 
   currentKlineCode = code;
+  currentKlinePeriod = '240';
+  // 重置周期标签
+  document.querySelectorAll('.kline-period').forEach(b => {
+    b.classList.toggle('active', b.dataset.scale === '240');
+  });
+
   document.getElementById('klineTitle').textContent = name + ' K线';
   klineChartDom.innerHTML = '<div class="kline-loading">加载中...</div>';
   overlay.classList.add('show');
 
   await fetchAndRenderKline(code);
 
-  // 定时刷新 K 线
+  // 定时刷新日K
   klineTimer = setInterval(() => fetchAndRenderKline(code), KLINE_INTERVAL);
 }
 
 async function fetchAndRenderKline(code) {
   try {
-    const resp = await fetch(`/api/kline?code=${code}&days=120&_=${Date.now()}`);
+    const scale = currentKlinePeriod;
+    const resp = await fetch(`/api/kline?code=${code}&scale=${scale}&_=${Date.now()}`);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
     const items = data.items || [];

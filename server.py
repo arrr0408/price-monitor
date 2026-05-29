@@ -475,15 +475,66 @@ def api_state():
 # ═══════════════════════════════════════════
 
 KLINE_CACHE = {}
-KLINE_CACHE_TTL = 5  # 5秒缓存，日线实时更新
+KLINE_CACHE_TTL = 5  # 秒（分时/日线实时更新，周K月K在客户端缓存更久）
 
 KLINE_URL = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
+
+# scale → 默认 datalen
+SCALE_DEFAULTS = {"5": "240", "240": "120", "1200": "52", "4800": "36"}
+
+
+def _agg_kline(items, interval):
+    """将日线数据聚合为周线/月线"""
+    if not items:
+        return []
+    result = []
+    bucket = None
+    for d in items:
+        day = d.get("day", "")
+        if interval == "week":
+            # 按周分组：取 year+week 作为 key
+            from datetime import datetime
+            try:
+                dt = datetime.strptime(day, "%Y-%m-%d")
+                key = f"{dt.isocalendar()[0]}-W{dt.isocalendar()[1]:02d}"
+            except Exception:
+                key = day[:7]
+        else:
+            key = day[:7]  # 按月：YYYY-MM
+
+        if bucket is None or bucket["key"] != key:
+            if bucket:
+                result.append(bucket["data"])
+            bucket = {"key": key, "data": {
+                "day": key,
+                "open": float(d["open"]),
+                "high": float(d["high"]),
+                "low": float(d["low"]),
+                "close": float(d["close"]),
+                "volume": str(sum(float(x.get("volume", 0) or 0) for x in [d])),
+            }}
+        else:
+            bd = bucket["data"]
+            bd["high"] = str(max(float(bd["high"]), float(d["high"])))
+            bd["low"] = str(min(float(bd["low"]), float(d["low"])))
+            bd["close"] = d["close"]
+            bd["volume"] = str(float(bd.get("volume", 0) or 0) + (float(d.get("volume", 0) or 0)))
+    if bucket:
+        result.append(bucket["data"])
+    # 计算 MA（周K/月K用简化MA：取close计算）
+    closes = [float(r["close"]) for r in result]
+    for i, r in enumerate(result):
+        r["ma_price5"] = str(round(sum(closes[max(0,i-4):i+1]) / min(i+1, 5), 2))
+        r["ma_price10"] = str(round(sum(closes[max(0,i-9):i+1]) / min(i+1, 10), 2))
+        r["ma_price20"] = str(round(sum(closes[max(0,i-19):i+1]) / min(i+1, 20), 2))
+    return result
 
 
 @app.route("/api/kline")
 def api_kline():
     code = request.args.get("code", "").strip()
-    days = request.args.get("days", "120")
+    scale = request.args.get("scale", "240")
+    datalen = request.args.get("datalen") or SCALE_DEFAULTS.get(scale, "120")
 
     if not code:
         return jsonify({"error": "缺少 code 参数"}), 400
@@ -491,32 +542,47 @@ def api_kline():
     # computed_jicun 映射到 Au99.99 的K线
     fetch_code = "gjs_Au9999" if code == "computed_jicun" else code
 
-    # 检查缓存
-    cache_key = f"{fetch_code}:{days}"
+    # 检查缓存（周K/月K缓存更久）
+    cache_key = f"{fetch_code}:{scale}:{datalen}"
+    cache_ttl = 5 if scale in ("5", "240") else 3600
     cached = KLINE_CACHE.get(cache_key)
-    if cached and time.time() - cached["ts"] < KLINE_CACHE_TTL:
+    if cached and time.time() - cached["ts"] < cache_ttl:
         return jsonify(cached["data"])
 
-    try:
-        resp = requests.get(KLINE_URL, params={
-            "symbol": fetch_code,
-            "scale": 240,
-            "ma": "5,10,20",
-            "datalen": days,
-        }, headers={"Referer": "https://finance.sina.com.cn"}, timeout=10)
-        resp.encoding = "utf-8"
-        data = resp.json()
+    # 周K/月K：从日线聚合
+    if scale in ("1200", "4800"):
+        interval = "week" if scale == "1200" else "month"
+        day_count = {"week": 250, "month": 750}.get(interval, 250)
+        try:
+            resp = requests.get(KLINE_URL, params={
+                "symbol": fetch_code, "scale": 240, "ma": "no",
+                "datalen": str(day_count),
+            }, headers={"Referer": "https://finance.sina.com.cn"}, timeout=10)
+            resp.encoding = "utf-8"
+            raw = resp.json()
+            items = _agg_kline(raw if isinstance(raw, list) else [], interval)
+            if datalen and datalen != str(day_count):
+                items = items[-int(datalen):]
+        except Exception as e:
+            return jsonify({"error": str(e), "items": []}), 500
+    else:
+        try:
+            resp = requests.get(KLINE_URL, params={
+                "symbol": fetch_code,
+                "scale": scale,
+                "ma": "5,10,20",
+                "datalen": datalen,
+            }, headers={"Referer": "https://finance.sina.com.cn"}, timeout=10)
+            resp.encoding = "utf-8"
+            data = resp.json()
+            items = data if isinstance(data, list) else []
+        except Exception as e:
+            return jsonify({"error": str(e), "items": []}), 500
 
-        if not isinstance(data, list):
-            data = []
+    result = {"items": items, "code": code, "fetch_code": fetch_code, "scale": scale}
 
-        result = {"items": data, "code": code, "fetch_code": fetch_code}
-
-        KLINE_CACHE[cache_key] = {"data": result, "ts": time.time()}
-        return jsonify(result)
-
-    except Exception as e:
-        return jsonify({"error": str(e), "items": []}), 500
+    KLINE_CACHE[cache_key] = {"data": result, "ts": time.time()}
+    return jsonify(result)
 
 
 # ═══════════════════════════════════════════
