@@ -542,13 +542,43 @@ function setLocal(key, val) {
 let _serverState = null;
 
 async function loadServerState() {
+  const localHidden = getLocal(HIDDEN_KEY, '[]');
+  const localCustoms = getLocal(STORAGE_KEY, '[]');
+
   try {
     const resp = await fetch('/api/state');
-    if (resp.ok) { _serverState = await resp.json(); }
+    if (resp.ok) {
+      const server = await resp.json();
+      const srvHidden = server.hidden || [];
+      const srvCustoms = server.customs || [];
+
+      // 合并策略：服务端为空但本地有数据时，以本地为准（部署后恢复场景）
+      if (srvHidden.length === 0 && srvCustoms.length === 0 && (localHidden.length > 0 || localCustoms.length > 0)) {
+        _serverState = { hidden: localHidden, customs: localCustoms };
+      } else {
+        // 合并取并集（跨设备同步）
+        _serverState = {
+          hidden: [...new Set([...srvHidden, ...localHidden])],
+          customs: mergeCustoms(srvCustoms, localCustoms),
+        };
+      }
+    }
   } catch (e) {}
+
   if (!_serverState) {
-    _serverState = { hidden: getLocal(HIDDEN_KEY, '[]'), customs: getLocal(STORAGE_KEY, '[]') };
+    _serverState = { hidden: localHidden, customs: localCustoms };
   }
+
+  setLocal(HIDDEN_KEY, _serverState.hidden);
+  setLocal(STORAGE_KEY, _serverState.customs);
+  await saveServerState();
+}
+
+function mergeCustoms(server, local) {
+  const map = {};
+  server.forEach(c => { map[c.code] = c; });
+  local.forEach(c => { map[c.code] = c; });
+  return Object.values(map);
 }
 
 async function saveServerState() {
@@ -733,7 +763,15 @@ async function fetchPrices() {
     // 静默同步服务端状态（跨设备）
     try {
       const r = await fetch('/api/state');
-      if (r.ok) { const s = await r.json(); _serverState = s; }
+      if (r.ok) {
+        const s = await r.json();
+        // 只在服务端有数据时才更新，防止部署后空状态覆盖本地
+        if ((s.hidden && s.hidden.length > 0) || (s.customs && s.customs.length > 0)) {
+          _serverState = s;
+          setLocal(HIDDEN_KEY, s.hidden);
+          setLocal(STORAGE_KEY, s.customs);
+        }
+      }
     } catch (e) {}
 
     const customs = getCustomItems();
