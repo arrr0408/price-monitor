@@ -19,7 +19,7 @@ def now_str(fmt="%H:%M:%S"):
     return time.strftime(fmt, time.gmtime(time.time() + 28800))
 
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 # Windows 控制台 UTF-8
 if sys.platform == "win32":
@@ -339,6 +339,16 @@ def index():
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "time": now_str()})
+
+
+@app.route("/service-worker.js")
+def service_worker():
+    return send_from_directory("static", "service-worker.js", mimetype="application/javascript")
+
+
+@app.route("/manifest.json")
+def manifest():
+    return send_from_directory("static", "manifest.json")
 
 
 def guess_type(code):

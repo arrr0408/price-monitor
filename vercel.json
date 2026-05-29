@@ -3,12 +3,20 @@
     {
       "src": "api/**/*.py",
       "use": "@vercel/python"
+    },
+    {
+      "src": "static/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "/api/$1"
+    },
+    {
+      "src": "/(manifest\\.json|service-worker\\.js)",
+      "dest": "/static/$1"
     },
     {
       "src": "/(.*)",

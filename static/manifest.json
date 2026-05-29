@@ -1,0 +1,17 @@
+{
+  "name": "实时价格监控",
+  "short_name": "价格监控",
+  "description": "实时金价、外汇、股票价格监控面板",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f0f1f6",
+  "theme_color": "#5b6af0",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>",
+      "sizes": "100x100",
+      "type": "image/svg+xml"
+    }
+  ]
+}

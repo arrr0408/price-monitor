@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="价格监控">
+<meta name="theme-color" content="#5b6af0">
+<link rel="manifest" href="/manifest.json">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 <title>实时价格监控</title>
@@ -1200,6 +1202,11 @@ window.addEventListener('beforeunload', () => {
   if (klineTimer) clearInterval(klineTimer);
   if (klineChart) klineChart.dispose();
 });
+
+// 注册 Service Worker (PWA)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/service-worker.js');
+}
 </script>
 
 </body>
