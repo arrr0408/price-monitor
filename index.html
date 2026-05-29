@@ -256,13 +256,11 @@
   /* 底部工具栏 — 沉浸光感 */
   .bottom-bar {
     position: fixed;
-    bottom: 24px;
     bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-    left: 50%;
-    transform: translateX(-50%);
+    right: 16px;
     display: flex;
     gap: 4px;
-    padding: 6px 16px;
+    padding: 6px;
     background: rgba(255, 255, 255, 0.64);
     backdrop-filter: blur(28px) saturate(180%);
     -webkit-backdrop-filter: blur(28px) saturate(180%);
